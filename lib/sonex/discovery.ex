@@ -28,9 +28,15 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
 
   def init(%DiscoverState{} = state) do
     # get head of if list, ignore the rest
-    { :ok, [ {_, flags} | _ ] } = :inet.getifaddrs
-    # first addr key is weird, delete it and grab the next..
-    ip_addr = Keyword.delete_first(flags, :addr) |> Keyword.fetch!(:addr)
+    ip_addr = case(:os.type) do
+      {:unix, :linux} ->
+        { :ok, interfaces } = :inet.getifaddrs
+        int_map = Map.new(interfaces)
+        int_map['wlan0'][:addr]
+      {:win32, :nt} -> 
+        { :ok, [ {_, flags} | _ ] } = :inet.getifaddrs
+        Keyword.delete_first(flags, :addr) |> Keyword.fetch!(:addr)
+    end
    
     {:ok, socket} = :gen_udp.open(0, [:binary, 
                                       :inet, {:ip, ip_addr },
@@ -47,8 +53,8 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
 
 
   def terminate(_reason, %DiscoverState{socket: socket} = state) when socket != nil do
-    require Logger
-    Logger.info("closing socket")
+    #require Logger
+    #Logger.info("closing socket")
     :ok = :gen_udp.close(socket)
   end
 

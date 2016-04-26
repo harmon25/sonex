@@ -4,6 +4,9 @@ Elixir Sonos Controller
 
 ## Installation
 
+On Linux
+`sudo apt-get install erlang-xmerl`
+
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed as:
 
   1. Add sonex to your list of dependencies in `mix.exs`:
