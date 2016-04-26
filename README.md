@@ -1,0 +1,2 @@
+# sonex
+Elixir Sonos Controller
