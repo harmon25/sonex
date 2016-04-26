@@ -1,0 +1,15 @@
+<s:Envelope 
+  xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" 
+  s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+<%= if soap_req_struct.header != nil do %>
+  <s:Header><%= soap_req_struct.header %></s:Header>
+<% end %>
+  <s:Body>
+    <u:<%= soap_req_struct.method %>
+       xmlns:u="<%= soap_req_struct.namespace %>">
+    <%= for [name, value] <- soap_req_struct.params do %>
+      <<%= name %>><%= value %></<%= name %>>
+    <% end %>
+    </u:<%= soap_req_struct.method %>>
+  </s:Body>
+</s:Envelope>
