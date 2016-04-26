@@ -28,22 +28,13 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
 
   def init(%DiscoverState{} = state) do
     # get head of if list, ignore the rest
-    ip_addr = case(:os.type) do
-      {:unix, :linux} ->
-        { :ok, interfaces } = :inet.getifaddrs
-        int_map = Map.new(interfaces)
-        int_map['wlan0'][:addr]
-      {:win32, :nt} -> 
-        { :ok, [ {_, flags} | _ ] } = :inet.getifaddrs
-        Keyword.delete_first(flags, :addr) |> Keyword.fetch!(:addr)
-    end
    
     {:ok, socket} = :gen_udp.open(0, [:binary, 
-                                      :inet, {:ip, ip_addr },
+                                      :inet, {:ip, {0,0,0,0} },
                                       {:active, true},
-                                      {:multicast_if, ip_addr},
+                                      {:multicast_if, {0,0,0,0}},
                                       {:multicast_ttl, 4},
-                                      {:add_membership, {@multicastaddr, ip_addr} }])
+                                      {:add_membership, {@multicastaddr, {0,0,0,0}} }])
      
      #fire two udp discover packets immediatly
      :gen_udp.send(socket, @multicastaddr, @multicastport , @playersearch )

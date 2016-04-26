@@ -1,19 +1,19 @@
 defmodule Sonex.Control do
+  require Logger
+
   def setName(%SonosDevice{} = device, new_name ) do
     resp = Sonex.SOAP.build(:device, "SetZoneAttributes", [ ["DesiredZoneName", new_name],
                                                      ["DesiredIcon", device.icon],
                                                      ["DesiredConfiguration", device.config]
                                                    ] )
-    |> Sonex.SOAP.post(device.ip)
+    |> Sonex.SOAP.post(device)
 
      case(resp) do
-      %HTTPoison.Response{status_code: 200} ->
-          # name was set, discover new name.
-          Sonex.Discovery.discover()
-      _ ->
-         IO.puts "bad resp!"
-
+      {:ok, _res_body} ->
+        # name was set, discover new name.
+        Sonex.Discovery.discover()
+      {:error, err_msg} ->
+         Logger.error(err_msg)
      end
-
   end
 end
