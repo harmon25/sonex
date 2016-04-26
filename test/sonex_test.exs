@@ -4,8 +4,7 @@ defmodule SonexTest do
 
   setup do
     # wait for discovery before running tests
-    IO.puts "Discovering..."
-    :timer.sleep(100)
+    :timer.sleep(175)
   end
 
   test "discovery" do
