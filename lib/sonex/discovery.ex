@@ -27,14 +27,16 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
   end
 
   def init(%DiscoverState{} = state) do
-    # get head of if list, ignore the rest
+    # not really sure why i need an IP, does not seem to work on 0.0.0.0 after some timeout occurs...
+    # needs to be passed a interface IP that is the same lan as sonos DLNA multicasts
+    ip_addr = Application.get_env(:sonex, :dlna_listen_addr)
    
     {:ok, socket} = :gen_udp.open(0, [:binary, 
-                                      :inet, {:ip, {0,0,0,0} },
+                                      :inet, {:ip, ip_addr },
                                       {:active, true},
-                                      {:multicast_if, {0,0,0,0}},
+                                      {:multicast_if, ip_addr},
                                       {:multicast_ttl, 4},
-                                      {:add_membership, {@multicastaddr, {0,0,0,0}} }])
+                                      {:add_membership, {@multicastaddr, ip_addr} }])
      
      #fire two udp discover packets immediatly
      :gen_udp.send(socket, @multicastaddr, @multicastport , @playersearch )
