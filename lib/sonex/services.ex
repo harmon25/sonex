@@ -4,13 +4,13 @@ defmodule Sonex.Service do
   @device_props "DeviceProperties"
   @music_services "MusicServices"
   @system_props "SystemProperties"
+  @redering_cont "RenderingControl"
   @zone_group "ZoneGroupTopology"
   @group_mgmt "GroupManagement"
   @content_dir "ContentDirectory"
   @conn_mngr "ConnectionManager"
   @av_transport "AVTransport"
   @q "Queue"
-
 
   defp make_type(service) do
      "urn:schemas-upnp-org:service:#{service}:1"
@@ -83,6 +83,20 @@ defmodule Sonex.Service do
        control: make_control_rendered(@av_transport),
        event: make_event_rendered(@av_transport),
        scpd_url: make_url(@av_transport)
+     }
+  end
+
+  @doc """
+  <serviceType>urn:schemas-upnp-org:service:RenderingControl:1</serviceType>
+  <controlURL>/MediaRenderer/RenderingControl/Control</controlURL>
+  <eventSubURL>/MediaRenderer/RenderingControl/Event</eventSubURL>
+  <SCPDURL>/xml/RenderingControl1.xml</SCPDURL>
+  """
+  def get(:rendered) do
+    %{ type: make_type(@redering_cont), 
+       control: make_control_rendered( @redering_cont),
+       event: make_event_rendered( @redering_cont),
+       scpd_url: make_url(@redering_cont)
      }
   end
 

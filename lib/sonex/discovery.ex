@@ -1,6 +1,6 @@
 defmodule SonosDevice do
-  defstruct  ip: nil, model: nil, usnID: nil, household: nil, name: nil, config: nil, icon: nil, version: nil
-  @type t :: %__MODULE__{ip: String.t, model: String.t, usnID: String.t, household: String.t, name: String.t, config: integer, icon: String.t, version: String.t}
+  defstruct  ip: nil, model: nil, uuid: nil, household: nil, name: nil, config: nil, icon: nil, version: nil, coordinator_uuid: nil
+  @type t :: %__MODULE__{ip: String.t, model: String.t, uuid: String.t, household: String.t, name: String.t, config: integer, icon: String.t, version: String.t, coordinator_uuid: String.t}
 end
 
 defmodule DiscoverState do
@@ -51,22 +51,55 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
     :ok = :gen_udp.close(socket)
   end
 
+  @doc """
+  Fires a UPNP discover packet onto the LAN,
+  all Sonos devices should respond, refresing player attributes stored in state
+  """
   def discover() do
    GenServer.cast( __MODULE__, :discover)
   end
 
+  @doc """
+  Retuns a single Sonos Player Struct, or nil of does not exist.
+  """
   def playerByName(name) do
     GenServer.call(__MODULE__, {:player_by_name, name})
   end
 
+
+  @doc """
+  Retuns a single Sonos Player Struct, or nil of does not exist.
+  """
+  def zoneByName(name) do
+    GenServer.call(__MODULE__, {:zone_by_name, name})
+  end
+
+  @doc """
+  Retuns a list of all Sonos Device Structs discovered on the LAN
+  """
   def players() do
     GenServer.call(__MODULE__, :players)
   end
 
+  @doc """
+  Retuns returns number of devices discoverd on lan
+  """
   def count() do
     GenServer.call(__MODULE__, :count)
   end
 
+
+  @doc """
+  Fires a UPNP discover packet onto the LAN,
+  all Sonos devices should respond, refresing player attributes stored in state
+  """
+  def zones() do
+   GenServer.call( __MODULE__, :zones)
+  end
+
+  @doc """
+  Terminates Sonex.Discovery GenServer
+  """
   def kill() do
    GenServer.stop(__MODULE__, "Done")
   end
@@ -75,13 +108,35 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
     res =
     Enum.find(players_list, nil,
       fn player -> 
-        player.name == name end
+        player.name == name
+      end
     )
-     {:reply, {:ok, res} , state}
+     {:reply, res, state}
+  end
+
+  def handle_call(:zones, _from, %DiscoverState{} = state)  do
+      zone_coordinators = Enum.filter(state.players, fn(player) -> 
+        player.uuid == player.coordinator_uuid
+      end)
+     {:reply, zone_coordinators , state}
+  end
+
+  def handle_call({:zone_by_name, name}, _from, %DiscoverState{} = state)  do
+      players_in_zone = 
+      Enum.filter(state.players, fn(player) -> player.uuid == player.coordinator_uuid end)
+      |> Enum.filter(fn(coordinator)-> coordinator.name == name end)
+      |> case do
+        [] ->
+          {:error, "Not a Coordintator"}
+       [zone] ->
+          Enum.filter(state.players, fn(p) -> zone.uuid == p.coordinator_uuid end)
+          |> Enum.reverse()
+      end
+     {:reply, players_in_zone , state}
   end
 
   def handle_call(:players, _from, %DiscoverState{} = state)  do
-     {:reply, {:ok, state.players} , state}
+     {:reply, state.players , state}
   end
 
   def handle_call(:count, _from, state) do
@@ -93,10 +148,6 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
     {:noreply, state}
   end
 
-  def handle_call(:discovered?, _from, state) do
-    {:reply, state.discovered, state}
-  end
-
   def handle_cast(:discover, state) do
     :gen_udp.send(state.socket, @multicastaddr, @multicastport , @playersearch )
     {:noreply, state }
@@ -104,17 +155,26 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
 
   def handle_info({:udp, socket, ip, _fromport, packet}, %DiscoverState{players: players_list} = state) do
     this_player = parse_upnp(ip, packet)
-    existing_player = Enum.find_index(players_list, fn player -> player.usnID == this_player.usnID end)
-    case(existing_player) do
+    case(knownplayer?(players_list, this_player.uuid)) do
       player_index when is_nil(player_index) == false ->
         {name, icon, config} = attributes(this_player)
-        updated_player = %SonosDevice{ this_player | name: name, icon: icon, config: config } 
+        {_, zone_coordinator, _} = group_attributes(this_player)
+        updated_player = %SonosDevice{ this_player | name: name, icon: icon, config: config, coordinator_uuid: zone_coordinator } 
         {:noreply, %DiscoverState{state | players: List.replace_at(players_list, player_index, updated_player)}}
       player_index when is_nil(player_index) == true ->
         {name, icon, config} = attributes(this_player)
-        new_players = players_list ++ [%SonosDevice{ this_player | name: name, icon: icon, config: config }]
+        {_, zone_coordinator, _} = group_attributes(this_player)
+        player = %SonosDevice{ this_player | name: name, icon: icon, config: config, coordinator_uuid: zone_coordinator }
+        #send discovered event
+        GenEvent.notify(Sonex.EventMngr, {:discovered, player})
+        new_players = [player | players_list ]
         {:noreply, %DiscoverState{state | players: new_players, player_count: Enum.count(new_players)}}
     end
+  end
+
+  
+  defp knownplayer?(players, uuid) do
+    Enum.find_index(players, fn player -> player.uuid == uuid end)
   end
 
   defp attributes(%SonosDevice{} = player) do
@@ -126,15 +186,52 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
     }
   end
 
+  defp group_attributes(%SonosDevice{} = player) do
+     import SweetXml
+    {:ok, res_body} = Sonex.SOAP.build(:zone, "GetZoneGroupAttributes") |> Sonex.SOAP.post(player)
+    #IO.puts res_body
+    {zone_name, zone_id, player_list } = { xpath(res_body, ~x"//u:GetZoneGroupAttributesResponse/CurrentZoneGroupName/text()"s), 
+     xpath(res_body, ~x"//u:GetZoneGroupAttributesResponse/CurrentZoneGroupID/text()"s),
+     xpath(res_body, ~x"//u:GetZoneGroupAttributesResponse/CurrentZonePlayerUUIDsInGroup/text()"ls)
+    }
+    [clean_zone, _] = String.split(zone_id, ":")
+    case(zone_name) do
+      "" ->
+         {nil, clean_zone, player_list}
+       _ ->
+         {zone_name, clean_zone, player_list}
+    end
+  end
+
+
+  def zone_group_state(%SonosDevice{} = player) do
+    import SweetXml
+    {:ok, res} = Sonex.SOAP.build(:zone, "GetZoneGroupState", [])
+    |> Sonex.SOAP.post(player)
+
+    xpath(res, ~x"//ZoneGroupState/text()"s)
+    |> xpath(~x"//ZoneGroups/ZoneGroup"l, coordinator_uuid: ~x"//./@Coordinator"s, members:
+      [
+        ~x"//./ZoneGroup/ZoneGroupMember"el,
+        name: ~x"//./@ZoneName"s,
+        uuid: ~x"//./@UUID"s,
+        addr: ~x"//./@Location"s,
+        config: ~x"//./@Configuration"i,
+        icon: ~x"//./@Icon"s,
+      ] )
+
+
+  end
+
   defp parse_upnp(ip, good_resp) do
     split_resp = String.split(good_resp, "\r\n")
     "SERVER: Linux UPnP/1.0 " <> vers_model = Enum.fetch!(split_resp, 4)
     [version, model_raw] = String.split(vers_model)
     model = String.lstrip(model_raw, ?() |> String.rstrip(?))
-    "USN: uuid:RINCON_" <> usn = Enum.fetch!(split_resp, 6)
-    usn_id = String.split(usn, "::") |> Enum.at(0)
+    "USN: uuid:" <> usn = Enum.fetch!(split_resp, 6)
+    uuid = String.split(usn, "::") |> Enum.at(0)
     "X-RINCON-HOUSEHOLD: Sonos_" <> household = Enum.fetch!(split_resp, 7)
-    %SonosDevice{ip: format_ip(ip), version: version, model: model, usnID: usn_id, household: household }
+    %SonosDevice{ip: format_ip(ip), version: version, model: model, uuid: uuid, household: household }
   end
 
   defp format_ip ({a, b, c, d}) do
