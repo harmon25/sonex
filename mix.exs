@@ -14,7 +14,7 @@ defmodule Sonex.Mixfile do
   #
   # Type "mix help compile.app" for more information
   def application do
-    [applications: [:logger,:httpoison,:cowboy, :ranch],
+    [applications: [:logger, :httpoison, :cowboy, :ranch],
      mod: {Sonex, []}]
   end
 

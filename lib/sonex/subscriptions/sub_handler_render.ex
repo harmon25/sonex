@@ -10,7 +10,7 @@ defmodule Sonex.SubHandlerRender do
 
      {:ok, data, _ } = :cowboy_req.body(request)
 
-    sub_info_base = SubHelpers.create_sub_data(request, "RCS")
+    sub_info_base = SubHelpers.create_sub_data(request, :renderer)
 
 
     clean_xml = SubHelpers.clean_xml_str(data)

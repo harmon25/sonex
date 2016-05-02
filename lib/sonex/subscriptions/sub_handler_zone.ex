@@ -10,7 +10,7 @@ defmodule Sonex.SubHandlerZone do
 
      {:ok, data, _ } = :cowboy_req.body(request)
 
-    sub_info_base = SubHelpers.create_sub_data(request, "ZONE")
+    sub_info_base = SubHelpers.create_sub_data(request, :zone)
 
     clean_xml = SubHelpers.clean_xml_str(data)
 

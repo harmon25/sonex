@@ -1,20 +1,21 @@
-defmodule SOAPReq do
-  @moduledoc """
-  Struct that represents the contents of a Sonos XML SOAP request
-  Typically only requires method and params
-  Build using build() function, it will automatically fill in namespace based on specific service
-  """
-
-  defstruct  path: nil, method: nil , namespace: nil, header: nil, params: []
-  @type t :: %__MODULE__{path: String.t, method: String.t, namespace: String.t, header: String.t, params: list(list)}
-end
-
-
 defmodule Sonex.SOAP do
   require EEx
+  import SweetXml
   @moduledoc """
   Functions for generating and sending Sonos SOAP requests via HTTP
   """
+
+  defmodule SOAPReq do
+    @moduledoc """
+    Struct that represents the contents of a Sonos XML SOAP request
+    Typically only requires method and params
+    Build using build() function, it will automatically fill in namespace based on specific service
+    """
+
+    defstruct  path: nil, method: nil , namespace: nil, header: nil, params: []
+    @type t :: %__MODULE__{path: String.t, method: String.t, namespace: String.t, header: String.t, params: list(list)}
+  end
+
 
 
   @doc """
@@ -40,7 +41,6 @@ defmodule Sonex.SOAP do
   Returns response body as XML, or error based on codes
   """
   def post(%SOAPReq{} = req, %SonosDevice{} = player) do
-      import SweetXml
       req_headers = gen_headers(req)
       req_body = gen(req)
       uri = "http://#{player.ip}:1400#{req.path}"
@@ -48,7 +48,7 @@ defmodule Sonex.SOAP do
       case(res) do
         %HTTPoison.Response{status_code: 200, body: res_body} ->
           {:ok, res_body}
-        %HTTPoison.Response{status_code: 500, body: res_err} -> 
+        %HTTPoison.Response{status_code: 500, body: res_err} ->
           case(req.namespace) do
             "urn:schemas-upnp-org:service:ContentDirectory:1" ->
               {:error, parse_soap_error(res_err, true)}
@@ -58,8 +58,11 @@ defmodule Sonex.SOAP do
       end
   end
 
+  defp gen_headers(soap_req) do
+    %{"Content-Type"=>"text/xml; charset=\"utf-8\"" , "SOAPACTION"=>"\"#{soap_req.namespace}##{soap_req.method}\""}
+  end
+
   def parse_soap_error(err_body, content_dir_req \\ false) do
-    import SweetXml
     #https://github.com/SoCo/SoCo/blob/master/soco/services.py
     # For error codes, see table 2.7.16 in
     # http://upnp.org/specs/av/UPnP-av-ContentDirectory-v1-Service.pdf
@@ -88,7 +91,7 @@ defmodule Sonex.SOAP do
      701 -> "Transition not available"
      702 when content_dir_req == true -> "Invalid CurrentTagValue"
      702 -> "No contents"
-     703 when content_dir_req == true -> "Invalid NewTagValue" 
+     703 when content_dir_req == true -> "Invalid NewTagValue"
      703-> "Read error"
      704 when content_dir_req == true -> "Required tag"
      704-> "Format not supported for playback"
@@ -126,17 +129,6 @@ defmodule Sonex.SOAP do
      739-> "Server Error"
       _ -> "Unknown Error"
     end
-  end
-
-  def parse_resp() do
-   import SweetXml
-   xml = "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\"><s:Body><u:GetZoneAttributesResponse xmlns:u=\"urn:schemas-upnp-org:service:DeviceProperties:1\"><CurrentZoneName>Dining Room</CurrentZoneName><CurrentIcon>x-rincon-roomicon:dining</CurrentIcon><CurrentConfiguration>1</CurrentConfiguration></u:GetZoneAttributesResponse></s:Body></s:Envelope>"
-   res = xml |> xpath(~x"//u:GetZoneAttributesResponse/CurrentZoneName/text()"s)
-   IO.inspect res
-  end
-
-  defp gen_headers(soap_req) do
-    %{"Content-Type"=>"text/xml; charset=\"utf-8\"" , "SOAPACTION"=>"\"#{soap_req.namespace}##{soap_req.method}\""}
   end
 
 end

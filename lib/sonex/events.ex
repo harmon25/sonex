@@ -12,11 +12,18 @@ defmodule Sonex.DefaultHandler do
     {:ok, state}
   end
 
-  def handle_event({:discovered, %SonosDevice{} = new_device}, state) do
+  def handle_event({:start, device}, state) do
+   Logger.info("start event received: #{device}")
+
+   {:ok, state}
+ end
+
+  def handle_event({:discovered, %ZonePlayer{} = new_device}, state) do
     Logger.info("discovered device! #{inspect new_device}")
     Sonex.SubMngr.subscribe(new_device, Sonex.Service.get(:renderer))
     Sonex.SubMngr.subscribe(new_device, Sonex.Service.get(:zone))
     Sonex.SubMngr.subscribe(new_device, Sonex.Service.get(:av))
+    #Sonex.SubMngr.subscribe(new_device, Sonex.Service.get(:device))
     #is this device a coordinator?
     #case(new_device.uuid == new_device.coordinator_uuid) do
     {:ok, state}

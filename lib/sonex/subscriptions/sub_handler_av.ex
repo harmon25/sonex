@@ -10,7 +10,7 @@ defmodule Sonex.SubHandlerAV do
 
      {:ok, data, _ } = :cowboy_req.body(request)
 
-     sub_info_base = SubHelpers.create_sub_data(request, "AV")
+     sub_info_base = SubHelpers.create_sub_data(request, :av)
 
 
     clean_xml = SubHelpers.clean_xml_str(data)

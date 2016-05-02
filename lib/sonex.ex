@@ -10,7 +10,8 @@ defmodule Sonex do
       # Define workers and child supervisors to be supervised
        worker(Sonex.Discovery, []),
        worker(Sonex.SubMngr, []),
-       worker(Sonex.EventMngr, [])
+       worker(Sonex.EventMngr, []),
+       supervisor(Sonex.Player.Supervisor, [])
     ]
 
     # See http://elixir-lang.org/docs/stable/elixir/Supervisor.html

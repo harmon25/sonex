@@ -1,17 +1,11 @@
-defmodule SubData do
-    defstruct  type: nil, sub_id: nil, from: nil, seq_num: nil, content: nil
-    @type t :: %__MODULE__{type: String.t, sub_id: String.t, from: String.t, seq_num: integer, content: map}
-end
-
-
 defmodule Sonex.SubHelpers do
 
   def create_sub_data(request, type) do
     {:undefined, "uuid:" <> uuid_raw, _ } = :cowboy_req.parse_header(<<"sid">>, request)
     {:undefined, seq, _ } = :cowboy_req.parse_header(<<"seq">>, request)
-    [header, main, sub_id ] = String.split(uuid_raw, "_")
-    uuid = header <> "_" <> main
-    %SubData{from: uuid, seq_num: seq, sub_id: sub_id, type: type}
+    [header, main, _sub_id ] = String.split(uuid_raw, "_")
+    from_id = header <> "_" <> main
+    %SubData{from: from_id, seq_num: seq, sub_id: uuid_raw, type: type}
   end
 
   def clean_xml_str(xml) do
