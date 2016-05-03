@@ -12,6 +12,8 @@ defmodule Sonex.SubHandlerZone do
 
     sub_info_base = SubHelpers.create_sub_data(request, :zone)
 
+
+
     clean_xml = SubHelpers.clean_xml_str(data)
 
     zone_info =
@@ -24,6 +26,18 @@ defmodule Sonex.SubHandlerZone do
         config: ~x"//./@Configuration"i,
         icon: ~x"//./@Icon"s,
       ] )
+
+    Enum.each(zone_info, fn(zone_group) ->
+        Enum.each(zone_group.members, fn(member) ->
+            case(GenServer.whereis({:global, {:player, member.uuid }})) do
+              nil ->
+                IO.puts "#{member.uuid} process not started"
+              pid ->
+                GenServer.cast(pid, {:set_coordinator, zone_group.coordinator_uuid })
+                GenServer.cast(pid, {:set_name, member.name })
+            end
+          end)
+    end)
 
     sub_info = %SubData{sub_info_base | content: zone_info}
 

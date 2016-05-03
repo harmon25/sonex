@@ -28,10 +28,15 @@ defmodule Sonex.SubHandlerAV do
         mode: xpath(event_xml, ~x"//Event/InstanceID/CurrentPlayMode/@val"s),
         current_track: xpath(event_xml, ~x"//Event/InstanceID/CurrentTrack/@val"i),
         tracks_total: xpath(event_xml, ~x"//Event/InstanceID/NumberOfTracks/@val"i),
-        track_info: %{title: title, artist: artist, album: album},
-        duration: xpath(event_xml, ~x"//Event/InstanceID/CurrentTrackDuration/@val"s)
+        track_info: %{title: title, artist: artist, album: album,
+        duration: xpath(event_xml, ~x"//Event/InstanceID/CurrentTrackDuration/@val"s) },
        }
      }
+
+  player_pid = GenServer.whereis({:global, {:player, sub_info_base.from}})
+  GenServer.cast(player_pid, {:set_state, sub_info.content})
+     
+
 
 
     IO.inspect sub_info

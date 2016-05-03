@@ -21,17 +21,20 @@ defmodule Sonex.SubHandlerRender do
     event_xml = xpath(clean_xml, ~x"//e:propertyset/e:property/LastChange/*[1]"e)
     #volume_state = xpath(event_xml, ~x"//Event/InstanceID/Volume/@val"il)
     #mute_info = xpath(event_xml, ~x"//Event/InstanceID/Mute/@val"il)
+    player_pid = GenServer.whereis({:global, {:player, sub_info_base.from}})
+
+
     sub_content_map =
-    get_volume(%{}, event_xml)
+    get_volume(player_pid, event_xml)
     |> get_mute(event_xml)
     |> get_bass(event_xml)
     |> get_treble(event_xml)
     |> get_loudness(event_xml)
 
-    sub_info = %SubData{sub_info_base | content: sub_content_map}
+    #sub_info = %SubData{sub_info_base | content: sub_content_map}
 
 
-    IO.inspect sub_info
+    #IO.inspect sub_info
 
 
     { :ok, reply } = :cowboy_req.reply(200, request )
@@ -44,50 +47,60 @@ defmodule Sonex.SubHandlerRender do
    end
 
 
-   defp get_volume(map, xml) do
+   defp get_volume(pid, xml) do
      case(xpath(xml, ~x"//Event/InstanceID/Volume"e)) do
-       nil -> map
+       nil -> pid
        _ ->
          [master_vol, left_vol, right_vol] = xpath(xml, ~x"//Event/InstanceID/Volume/@val"sl)
-         Map.put_new(map, :volume, %{m: master_vol, l: left_vol, r: right_vol } )
+         GenServer.cast(pid, {:set_volume, %{m: master_vol, l: left_vol, r: right_vol } } )
+         #Map.put_new(map, :volume, %{m: master_vol, l: left_vol, r: right_vol } )
+         pid
      end
    end
 
-   defp get_mute(map, xml) do
+   defp get_mute(pid, xml) do
      case(xpath(xml, ~x"//Event/InstanceID/Mute"e)) do
-       nil ->  map
+       nil ->  pid
        _ ->
          [master_m, _, _] = xpath(xml, ~x"//Event/InstanceID/Mute/@val"sl)
+         mute =
          case(master_m) do
-           "0" -> Map.put_new(map, :mute, false )
-           "1" -> Map.put_new(map, :mute, true )
+           "0" -> false
+           "1" -> true
          end
+        GenServer.cast(pid, {:set_mute, mute } )
+        pid
      end
    end
 
-   defp get_treble(map, xml) do
+   defp get_treble(pid, xml) do
      case(xpath(xml, ~x"//Event/InstanceID/Treble"e)) do
-       nil -> map
-       _ -> Map.put_new(map, :treble, xpath(xml, ~x"//Event/InstanceID/Treble/@val"i))
-     end
-   end
-
-   defp get_bass(map, xml) do
-     case(xpath(xml, ~x"//Event/InstanceID/Bass"e)) do
-       nil ->  map
-       _ ->  Map.put_new(map, :bass, xpath(xml, ~x"//Event/InstanceID/Bass/@val"i))
-
-     end
-   end
-
-   defp get_loudness(map, xml) do
-     case(xpath(xml, ~x"//Event/InstanceID/Loudness"e)) do
-       nil -> map
+       nil -> pid
        _ ->
-         case(xpath(xml, ~x"//Event/InstanceID/Loudness/@val"s)) do
-           "0" ->  Map.put_new(map, :loudness, false )
-           "1" ->  Map.put_new(map, :loudness, true )
+        GenServer.cast(pid, {:set_treble, xpath(xml, ~x"//Event/InstanceID/Treble/@val"i) } )
+        pid
+     end
+   end
+
+   defp get_bass(pid, xml) do
+     case(xpath(xml, ~x"//Event/InstanceID/Bass"e)) do
+       nil ->  pid
+       _ ->
+        GenServer.cast(pid, {:set_bass, xpath(xml, ~x"//Event/InstanceID/Bass/@val"i) } )
+        pid
+     end
+   end
+
+   defp get_loudness(pid, xml) do
+     case(xpath(xml, ~x"//Event/InstanceID/Loudness"e)) do
+       nil -> pid
+       _ ->
+         loudness =
+          case(xpath(xml, ~x"//Event/InstanceID/Loudness/@val"s)) do
+           "0" -> false
+           "1" -> true
          end
+        GenServer.cast(pid, {:set_loudness, loudness } )
      end
    end
 
