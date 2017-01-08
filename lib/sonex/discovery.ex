@@ -149,13 +149,14 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
 
   def handle_info({:udp, socket, ip, _fromport, packet}, %DiscoverState{players: players_list} = state) do
     this_player = parse_upnp(ip, packet)
+    #IO.puts "GOT PACKET:"
+    #IO.inspect players_list
+    #IO.inspect this_player.uuid
+
     case(knownplayer?(players_list, this_player.uuid)) do
-      player_index when is_nil(player_index) == false ->
-        {name, icon, config} = attributes(this_player)
-        {_, zone_coordinator, _} = group_attributes(this_player)
-        updated_player = %SonosDevice{ this_player | name: name, icon: icon, config: config, coordinator_uuid: zone_coordinator }
-        {:noreply, %DiscoverState{state | players: List.replace_at(players_list, player_index, updated_player)}}
-      player_index when is_nil(player_index) == true ->
+      # when it is a new player
+      nil ->
+      #  IO.puts "NEW PLAYER?"
         atts = attributes(this_player)
         {_, zone_coordinator, _} = group_attributes(this_player)
       #  player = %SonosDevice{ this_player | name: name, icon: icon, config: config, coordinator_uuid: zone_coordinator }
@@ -163,9 +164,17 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
         Sonex.PlayerMonitor.create(build(this_player.uuid, this_player.ip, zone_coordinator,  atts))
         #GenEvent.notify(Sonex.EventMngr, {:discovered, player})
         #GenEvent.notify(Sonex.EventMngr, {:start, player})
-        #new_players = [player | players_list ]
-        new_players = [this_player.uuid | players_list]
+        new_players = [this_player | players_list ]
+        #new_players = [this_player.uuid | players_list]
         {:noreply, %DiscoverState{state | players: new_players , player_count: Enum.count(new_players)}}
+      #when know the player
+      player_index ->
+        IO.puts "UPDATE PLAYER:"
+        {name, icon, config} = attributes(this_player)
+        {_, zone_coordinator, _} = group_attributes(this_player)
+        updated_player = %SonosDevice{ this_player | name: name, icon: icon, config: config, coordinator_uuid: zone_coordinator }
+        {:noreply, %DiscoverState{state | players: List.replace_at(players_list, player_index, updated_player)}}
+
     end
   end
 
@@ -176,7 +185,7 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
 
 
   defp knownplayer?(players, uuid) do
-    Enum.find_index(players, fn player_uuid -> player_uuid == uuid end)
+    Enum.find_index(players, fn player -> player.uuid == uuid end)
   end
 
   defp attributes(%SonosDevice{} = player) do
@@ -190,18 +199,19 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
 
   defp group_attributes(%SonosDevice{} = player) do
      import SweetXml
-    {:ok, res_body} = Sonex.SOAP.build(:zone, "GetZoneGroupAttributes") |> Sonex.SOAP.post(player)
-    #IO.puts res_body
-    {zone_name, zone_id, player_list } = { xpath(res_body, ~x"//u:GetZoneGroupAttributesResponse/CurrentZoneGroupName/text()"s),
-     xpath(res_body, ~x"//u:GetZoneGroupAttributesResponse/CurrentZoneGroupID/text()"s),
-     xpath(res_body, ~x"//u:GetZoneGroupAttributesResponse/CurrentZonePlayerUUIDsInGroup/text()"ls)
-    }
-    [clean_zone, _] = String.split(zone_id, ":")
+    {:ok, res_body} =
+      Sonex.SOAP.build(:zone, "GetZoneGroupAttributes")
+      |> Sonex.SOAP.post(player)
+
+    zone_name = xpath(res_body, ~x"//u:GetZoneGroupAttributesResponse/CurrentZoneGroupName/text()"s)
+    zone_id = xpath(res_body, ~x"//u:GetZoneGroupAttributesResponse/CurrentZoneGroupID/text()"s)
+    zone_players_list =  xpath(res_body, ~x"//u:GetZoneGroupAttributesResponse/CurrentZonePlayerUUIDsInGroup/text()"ls)
     case(zone_name) do
-      "" ->
-         {nil, clean_zone, player_list}
+      # this zone is not in a gruop
+      "" -> {nil, nil, []}
        _ ->
-         {zone_name, clean_zone, player_list}
+         [clean_zone, _] = String.split(zone_id, ":")
+         {zone_name, clean_zone, zone_players_list}
     end
   end
 
@@ -233,12 +243,7 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
     "USN: uuid:" <> usn = Enum.fetch!(split_resp, 6)
     uuid = String.split(usn, "::") |> Enum.at(0)
     "X-RINCON-HOUSEHOLD: Sonos_" <> household = Enum.fetch!(split_resp, 7)
-    %SonosDevice{ip: format_ip(ip), version: version, model: model, uuid: uuid, household: household }
+    %SonosDevice{ip: :inet.ntoa(ip), version: version, model: model, uuid: uuid, household: household }
   end
-
-  defp format_ip ({a, b, c, d}) do
-    "#{a}.#{b}.#{c}.#{d}"
-  end
-
 
 end
