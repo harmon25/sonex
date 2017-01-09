@@ -16,6 +16,15 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
   @multicastaddr {239,255,255,250}
   @multicastport 1900
 
+
+
+  def get_ip(interface_name) do
+    {:ok, test_socket} = :inet_udp.open(8989, [])
+    {:ok, [addr: ip]} = :inet.ifget(test_socket, to_charlist(interface_name), [:addr])
+    :inet_udp.close(test_socket)
+     ip
+  end
+
   def start_link() do
     GenServer.start_link(__MODULE__, %DiscoverState{}, name: __MODULE__)
   end
@@ -23,7 +32,13 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
   def init(%DiscoverState{} = state) do
     # not really sure why i need an IP, does not seem to work on 0.0.0.0 after some timeout occurs...
     # needs to be passed a interface IP that is the same lan as sonos DLNA multicasts
-    ip_addr = Application.get_env(:sonex, :dlna_listen_addr)
+    ip_addr =
+    if Application.get_env(:sonex, :dlna_listen_addr) do
+      Application.get_env(:sonex, :dlna_listen_addr)
+    else
+      get_ip(Application.get_env(:sonex, :dlna_listen_int))
+    end
+
 
     {:ok, socket} = :gen_udp.open(0, [:binary,
                                       :inet, {:ip, ip_addr },
@@ -39,7 +54,7 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
   end
 
 
-  def terminate(_reason, %DiscoverState{socket: socket} = state) when socket != nil do
+  def terminate(_reason, %DiscoverState{socket: socket}) when socket != nil do
     #require Logger
     #Logger.info("closing socket")
     :ok = :gen_udp.close(socket)
@@ -147,34 +162,39 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
     {:noreply, state }
   end
 
-  def handle_info({:udp, socket, ip, _fromport, packet}, %DiscoverState{players: players_list} = state) do
+  def handle_info({:udp, _socket, ip, _fromport, packet}, state) do
+    %DiscoverState{players: players_list} = state
     this_player = parse_upnp(ip, packet)
-    #IO.puts "GOT PACKET:"
-    #IO.inspect players_list
-    #IO.inspect this_player.uuid
+    if this_player do
+      #IO.inspect this_player.uuid
+      {name, icon, config} = attributes(this_player)
+      if name != "BRIDGE" do
+        case(knownplayer?(players_list, this_player.uuid)) do
+          # when it is a new player
+          nil ->
+          #  IO.puts "NEW PLAYER?"
+            {_, zone_coordinator, _} = group_attributes(this_player)
+          #  player = %SonosDevice{ this_player | name: name, icon: icon, config: config, coordinator_uuid: zone_coordinator }
+            #send discovered event
+            Sonex.PlayerMonitor.create(build(this_player.uuid, this_player.ip, zone_coordinator, {name, icon, config}))
+            #GenEvent.notify(Sonex.EventMngr, {:discovered, this_player})
+            #GenEvent.notify(Sonex.EventMngr, {:start, this_player})
+            new_players = [this_player | players_list ]
+            #new_players = [this_player.uuid | players_list]
+            {:noreply, %DiscoverState{state | players: new_players , player_count: Enum.count(new_players)}}
+          #when we know the player
+          player_index ->
+            #IO.puts "UPDATE PLAYER:"
+            {_, zone_coordinator, _} = group_attributes(this_player)
+            updated_player = %SonosDevice{ this_player | name: name, icon: icon, config: config, coordinator_uuid: zone_coordinator }
+            {:noreply, %DiscoverState{state | players: List.replace_at(players_list, player_index, updated_player)}}
 
-    case(knownplayer?(players_list, this_player.uuid)) do
-      # when it is a new player
-      nil ->
-      #  IO.puts "NEW PLAYER?"
-        atts = attributes(this_player)
-        {_, zone_coordinator, _} = group_attributes(this_player)
-      #  player = %SonosDevice{ this_player | name: name, icon: icon, config: config, coordinator_uuid: zone_coordinator }
-        #send discovered event
-        Sonex.PlayerMonitor.create(build(this_player.uuid, this_player.ip, zone_coordinator,  atts))
-        #GenEvent.notify(Sonex.EventMngr, {:discovered, player})
-        #GenEvent.notify(Sonex.EventMngr, {:start, player})
-        new_players = [this_player | players_list ]
-        #new_players = [this_player.uuid | players_list]
-        {:noreply, %DiscoverState{state | players: new_players , player_count: Enum.count(new_players)}}
-      #when know the player
-      player_index ->
-        IO.puts "UPDATE PLAYER:"
-        {name, icon, config} = attributes(this_player)
-        {_, zone_coordinator, _} = group_attributes(this_player)
-        updated_player = %SonosDevice{ this_player | name: name, icon: icon, config: config, coordinator_uuid: zone_coordinator }
-        {:noreply, %DiscoverState{state | players: List.replace_at(players_list, player_index, updated_player)}}
-
+        end
+      else # this is a bridge
+      {:noreply, state}
+    end
+  else # could not parse upnp, probably not sonos player
+      {:noreply, state}
     end
   end
 
@@ -237,13 +257,15 @@ ST: urn:schemas-upnp-org:device:ZonePlayer:1
 
   defp parse_upnp(ip, good_resp) do
     split_resp = String.split(good_resp, "\r\n")
-    "SERVER: Linux UPnP/1.0 " <> vers_model = Enum.fetch!(split_resp, 4)
-    [version, model_raw] = String.split(vers_model)
-    model = String.lstrip(model_raw, ?() |> String.rstrip(?))
-    "USN: uuid:" <> usn = Enum.fetch!(split_resp, 6)
-    uuid = String.split(usn, "::") |> Enum.at(0)
-    "X-RINCON-HOUSEHOLD: Sonos_" <> household = Enum.fetch!(split_resp, 7)
-    %SonosDevice{ip: :inet.ntoa(ip), version: version, model: model, uuid: uuid, household: household }
+    vers_model = Enum.fetch!(split_resp, 4)
+    if String.contains?(vers_model, "Sonos") do
+      ["SERVER:", "Linux", "UPnP/1.0", version, model_raw] = String.split(vers_model)
+      model = String.lstrip(model_raw, ?() |> String.rstrip(?))
+      "USN: uuid:" <> usn = Enum.fetch!(split_resp, 6)
+      uuid = String.split(usn, "::") |> Enum.at(0)
+      "X-RINCON-HOUSEHOLD: Sonos_" <> household = Enum.fetch!(split_resp, 7)
+      %SonosDevice{ip: :inet.ntoa(ip), version: version, model: model, uuid: uuid, household: household }\
+    end
   end
 
 end

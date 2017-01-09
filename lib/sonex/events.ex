@@ -2,9 +2,9 @@ defmodule Sonex.DefaultHandler do
   use GenEvent
   require Logger
 
-  def init(_args) do
+  def init(args) do
     Logger.info("Event handler added!")
-    {:ok, _args}
+    {:ok, args}
   end
 
    def handle_event({:test, msg}, state) do

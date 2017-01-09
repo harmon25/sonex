@@ -129,12 +129,12 @@ defmodule Sonex.Service do
   <SCPDURL>/xml/Queue1.xml</SCPDURL>
   """
   def get(:queue) do
-      make_service(@aq, :renderer)
+      make_service(@q, :renderer)
   end
 
   def actions(service) do
 
-    case(Sonex.Discovery.discovered?) do
+    case(Enum.count(Sonex.Discovery.players) > 0) do
       true ->
           serv = get(service)
           {:ok, players } = Sonex.Discovery.players

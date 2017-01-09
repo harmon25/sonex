@@ -8,7 +8,9 @@ use Mix.Config
 # if you want to provide default values for your application for
 # 3rd-party users, it should be done in your "mix.exs" file.
 
-config :sonex, [{:dlna_listen_addr, {0,0,0,0}}]
+config :sonex,
+    dlna_listen_addr: {192,168,1,38}, # for windows
+    dlna_listen_int: nil # for linux and osx
 
 # You can configure for your application as:
 #

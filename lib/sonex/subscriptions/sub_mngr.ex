@@ -37,8 +37,8 @@ defmodule Sonex.SubMngr do
     GenServer.call( __MODULE__, :protocol_opts)
   end
 
-  def handle_call(:protocol_opts, _from, _state) do
-    {:reply, :ok, _state}
+  def handle_call(:protocol_opts, _from, state) do
+    {:reply, :ok, state}
   end
 
 
@@ -47,6 +47,14 @@ defmodule Sonex.SubMngr do
      # resubscribe 1 minute before sub timesout
      {:ok, timer} = :timer.send_interval(@resub, {:sub_interval, device, service} )
     {:reply, sub_id, %{state| subs: [ %{timer: timer, name: device.name, sub_id: sub_id , type: service.event} | state.subs] } }
+  end
+
+  def handle_call({:unsubscribe, device, service, sub_id}, _from, %{subs: sub_list} = state) do
+     {:ok, sub_id} = unsubscribe_req(device, service, sub_id)
+     to_unsub = Enum.find(sub_list, fn(s)-> s == sub_id end )
+     :timer.cancel(to_unsub.timer)
+     new_subs = Enum.filter(sub_list, fn(s)-> s != sub_id end)
+     {:reply, :ok, %{state| subs: new_subs } }
   end
 
   def handle_info({:sub_interval, device, service}, state ) do
@@ -69,9 +77,8 @@ defmodule Sonex.SubMngr do
     HTTPoison.request!(:unsubscribe, uri, "" ,req_headers)
     |> handle_sub_response()
 
-    resp =
     case(valid_resp) do
-       {:ok, res_body} ->
+       {:ok, _res_body} ->
          {:ok, %{msg: "Unsubscription successful"}}
        {:error, err_msg} ->
          {:error, err_msg}
@@ -80,7 +87,13 @@ defmodule Sonex.SubMngr do
 
 
   defp sub_headers(port, serv) do
-    {a,b,c,d} = Application.get_env(:sonex, :dlna_listen_addr)
+    {a,b,c,d} =
+     if Application.get_env(:sonex, :dlna_listen_addr) do
+       Application.get_env(:sonex, :dlna_listen_addr)
+     else
+       Sonex.Discovery.get_ip(Application.get_env(:sonex, :dlna_listen_int))
+     end
+
     cb_uri =
     case(serv) do
       %{type: "urn:schemas-upnp-org:service:ZoneGroupTopology:1"} ->
@@ -97,7 +110,7 @@ defmodule Sonex.SubMngr do
 
   defp handle_sub_response(resp) do
     case(resp) do
-      %HTTPoison.Response{status_code: 200, body: res_body, headers: headers} ->
+      %HTTPoison.Response{status_code: 200, body: _res_body, headers: headers} ->
         header_map = Map.new(headers)
         "uuid:" <> sub_id = header_map["SID"]
         {:ok, sub_id}
