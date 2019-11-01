@@ -1,22 +1,36 @@
 defmodule Sonex do
-  use Application
+  alias Sonex.Player
+  alias Sonex.Network.State
 
-  # See http://elixir-lang.org/docs/stable/elixir/Application.html
-  # for more information on OTP Applications
-  def start(_type, _args) do
-    import Supervisor.Spec, warn: false
+  def get_zones() do
+    State.zones()
+  end
 
-    children = [
-      # Define workers and child supervisors to be supervised
-       worker(Sonex.Discovery, []),
-       worker(Sonex.SubMngr, []),
-       worker(Sonex.EventMngr, []),
-       supervisor(Sonex.Player.Supervisor, [])
-    ]
+  def get_players() do
+    State.players()
+  end
 
-    # See http://elixir-lang.org/docs/stable/elixir/Supervisor.html
-    # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: Sonex.Supervisor]
-    Supervisor.start_link(children, opts)
+  def get_player(uuid) do
+    State.get_player(uuid)
+  end
+
+  def players_in_zone(zone_uuid) do
+    State.players_in_zone(zone_uuid)
+  end
+
+  def start_player(player) do
+    Player.control(player, :play)
+  end
+
+  def stop_player(player) do
+    Player.control(player, :stop)
+  end
+
+  def set_volume(player, level) when is_binary(level) do
+    Player.audio(player, :volume, String.to_integer(level))
+  end
+
+  def set_volume(player, level) do
+    Player.audio(player, :volume, level)
   end
 end
