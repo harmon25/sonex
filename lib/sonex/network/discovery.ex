@@ -93,7 +93,7 @@ defmodule Sonex.Discovery do
           coordinator_uuid: zone_coordinator
       }
 
-      State.update_device(player)
+      State.put_device(player)
     else
       {:bridge, true} ->
         Logger.debug("found bridge")

@@ -22,7 +22,7 @@ defmodule Sonex.Network.State do
   end
 
   def put_device(%SonosDevice{} = device) do
-    GenServer.call(__MODULE__, {:update_device, device})
+    GenServer.call(__MODULE__, {:put_device, device})
   end
 
   def players_in_zone(zone_uuid) do
@@ -56,7 +56,7 @@ defmodule Sonex.Network.State do
   end
 
   def handle_call(
-        {:update_device, %SonosDevice{uuid: uuid} = device},
+        {:put_device, %SonosDevice{uuid: uuid} = device},
         _from,
         %NetState{players: players} = state
       ) do
