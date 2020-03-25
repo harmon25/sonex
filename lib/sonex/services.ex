@@ -19,7 +19,7 @@ defmodule Sonex.Service do
   <SCPDURL>/xml/AudioIn1.xml</SCPDURL>
   """
   def get(:audio_in) do
-      make_service(@audio_input)
+    make_service(@audio_input)
   end
 
   @doc """
@@ -29,7 +29,7 @@ defmodule Sonex.Service do
     <SCPDURL>/xml/DeviceProperties1.xml</SCPDURL>
   """
   def get(:device) do
-      make_service(@device_props)
+    make_service(@device_props)
   end
 
   @doc """
@@ -49,7 +49,7 @@ defmodule Sonex.Service do
   <SCPDURL>/xml/ZoneGroupTopology1.xml</SCPDURL>
   """
   def get(:zone) do
-      make_service(@zone_group)
+    make_service(@zone_group)
   end
 
   @doc """
@@ -79,7 +79,7 @@ defmodule Sonex.Service do
     <SCPDURL>/xml/ContentDirectory1.xml</SCPDURL>
   """
   def get(:content) do
-      make_service(@content_dir, :server)
+    make_service(@content_dir, :server)
   end
 
   @doc """
@@ -89,7 +89,7 @@ defmodule Sonex.Service do
   <SCPDURL>/xml/ConnectionManager1.xml</SCPDURL>
   """
   def get(:conn) do
-      make_service(@conn_mngr, :server)
+    make_service(@conn_mngr, :server)
   end
 
   @doc """
@@ -99,7 +99,7 @@ defmodule Sonex.Service do
   <SCPDURL>/xml/AlarmClock1.xml</SCPDURL>
   """
   def get(:alarm) do
-      make_service(@alarm_clock, :renderer)
+    make_service(@alarm_clock, :renderer)
   end
 
   @doc """
@@ -119,7 +119,7 @@ defmodule Sonex.Service do
   <SCPDURL>/xml/RenderingControl1.xml</SCPDURL>
   """
   def get(:renderer) do
-    make_service( @redering_cont, :renderer)
+    make_service(@redering_cont, :renderer)
   end
 
   @doc """
@@ -129,80 +129,85 @@ defmodule Sonex.Service do
   <SCPDURL>/xml/Queue1.xml</SCPDURL>
   """
   def get(:queue) do
-      make_service(@q, :renderer)
+    make_service(@q, :renderer)
   end
 
   def actions(service) do
-
-    case(Enum.count(Sonex.Discovery.players) > 0) do
+    case(Enum.count(Sonex.get_players()) > 0) do
       true ->
-          serv = get(service)
-          {:ok, players } = Sonex.Discovery.players
-          player = hd(players)
-          %HTTPoison.Response{status_code: 200, body: res_body, headers: _resp_headers} =
+        serv = get(service)
+        {:ok, players} = Sonex.get_players()
+        player = hd(players)
+
+        %HTTPoison.Response{status_code: 200, body: res_body, headers: _resp_headers} =
           HTTPoison.get!("http://" <> player.ip <> ":1400" <> serv.scpd_url)
-          IO.puts res_body
+
+        IO.puts(res_body)
+
       false ->
         {:error, "no devices to query for actions"}
     end
-     #
-     #
+
+    #
+    #
   end
 
-  defp make_service(service_name ) do
-    %{type: make_type(service_name),
-     control: make_control(service_name),
-     event: make_event(service_name),
-     scpd_url: make_url(service_name)
+  defp make_service(service_name) do
+    %{
+      type: make_type(service_name),
+      control: make_control(service_name),
+      event: make_event(service_name),
+      scpd_url: make_url(service_name)
     }
   end
 
   defp make_service(service_name, :renderer) do
-    %{type: make_type(service_name),
-     control: make_control_renderer(service_name),
-     event: make_event_renderer(service_name),
-     scpd_url: make_url(service_name)
+    %{
+      type: make_type(service_name),
+      control: make_control_renderer(service_name),
+      event: make_event_renderer(service_name),
+      scpd_url: make_url(service_name)
     }
   end
 
   defp make_service(service_name, :server) do
-      %{type: make_type(service_name),
-       control: make_control_server(service_name),
-       event: make_event_server(service_name),
-       scpd_url: make_url(service_name)
-      }
+    %{
+      type: make_type(service_name),
+      control: make_control_server(service_name),
+      event: make_event_server(service_name),
+      scpd_url: make_url(service_name)
+    }
   end
 
   defp make_type(service) do
-     "urn:schemas-upnp-org:service:#{service}:1"
+    "urn:schemas-upnp-org:service:#{service}:1"
   end
 
   defp make_control(service) do
-     "/#{service}/Control"
+    "/#{service}/Control"
   end
 
   defp make_control_server(service) do
-     "/MediaServer/#{service}/Control"
+    "/MediaServer/#{service}/Control"
   end
 
   defp make_event_server(service) do
-     "/MediaServer/#{service}/Event"
+    "/MediaServer/#{service}/Event"
   end
 
   defp make_control_renderer(service) do
-     "/MediaRenderer/#{service}/Control"
+    "/MediaRenderer/#{service}/Control"
   end
 
   defp make_event_renderer(service) do
-     "/MediaRenderer/#{service}/Event"
+    "/MediaRenderer/#{service}/Event"
   end
 
   defp make_event(service) do
-     "/#{service}/Event"
+    "/#{service}/Event"
   end
 
   defp make_url(service) do
-     "/xml/#{service}1.xml"
+    "/xml/#{service}1.xml"
   end
-
 end
